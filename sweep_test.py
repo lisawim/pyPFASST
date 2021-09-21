@@ -3,6 +3,8 @@ from numpy import kron, transpose, matmul
 from numpy.fft import fft, ifft
 from numpy.linalg import inv
 import scipy
+import warnings
+warnings.filterwarnings('ignore')
 
 def coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, tau, tc_int, typeODE, ucIter, uc_MTilde, xc):
     
@@ -158,9 +160,9 @@ def coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, tau, tc_int, 
         # IMEX Version (advection diffusion equation)- uses the iterative method with S and SE
         
         # Initialisations
-        uc_new = np.zeros(Mc * nxc, dtype='cfloat')
-        fE = np.zeros(Mc * nxc, dtype='cfloat')
-        fI = np.zeros(Mc * nxc, dtype='cfloat')
+        uc_new = np.zeros(Mc * nxc, dtype='float')
+        fE = np.zeros(Mc * nxc, dtype='float')
+        fI = np.zeros(Mc * nxc, dtype='float')
         
         uc_new = ucIter
             
@@ -170,25 +172,26 @@ def coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, tau, tc_int, 
             Skmc = np.zeros((Mc - 1) * nxc, dtype='cfloat')
             for l in range(0, Mc-1):
                 for j in range(0, Mc):
-                    Skmc[l*nxc:l*nxc+nxc] += dt * Sc[l, j] * (AEc.dot(uc_new[j*nxc:j*nxc+nxc]) + AIc.dot(uc_new[j*nxc:j*nxc+nxc]))
+                    Skmc[l*nxc:l*nxc+nxc] += dt * Sc[l, j] * (ifft(AEc.dot(fft(uc_new[j*nxc:j*nxc+nxc]))) + ifft(AIc.dot(fft(uc_new[j*nxc:j*nxc+nxc]))))
                                             
             uc_new[0:nxc] = uc_MTilde
             
-            fE[0:nxc] = AEc.dot(uc_MTilde)     
+            fE[0:nxc] = ifft(AEc.dot(fft(uc_MTilde)))     
             
-            fI[0:nxc] = AIc.dot(uc_MTilde)
+            fI[0:nxc] = ifft(AIc.dot(fft(uc_MTilde)))
             
             # sweep
             for m in range(0, Mc-1):
-                rhs = uc_new[m*nxc:m*nxc+nxc] + dtc[m] * (fE[m*nxc:m*nxc+nxc] - AEc.dot(uc_new[m*nxc:m*nxc+nxc]) - AIc.dot(uc_new[(m+1)*nxc:(m+1)*nxc+nxc])) + Skmc[m*nxc:m*nxc+nxc] + tau[m*nxc:m*nxc+nxc]
+                rhs = uc_new[m*nxc:m*nxc+nxc] + dtc[m] * (fE[m*nxc:m*nxc+nxc] - ifft(AEc.dot(fft(uc_new[m*nxc:m*nxc+nxc]))) - ifft(AIc.dot(fft(uc_new[(m+1)*nxc:(m+1)*nxc+nxc])))) + Skmc[m*nxc:m*nxc+nxc] + tau[m*nxc:m*nxc+nxc]
             
-                uc_new[(m+1)*nxc:(m+1)*nxc+nxc] = np.linalg.solve(np.identity(nxc) - dtc[m]*AIc, rhs)
+                tmp = np.linalg.solve(np.identity(nxc) - dtc[m]*AIc, fft(rhs))
+                uc_new[(m+1)*nxc:(m+1)*nxc+nxc] = ifft(tmp)
             
                 # new explicit function values
-                fE[(m+1)*nxc:(m+1)*nxc+nxc] = AEc.dot(uc_new[(m+1)*nxc:(m+1)*nxc+nxc]) 
+                fE[(m+1)*nxc:(m+1)*nxc+nxc] = ifft(AEc.dot(fft(uc_new[(m+1)*nxc:(m+1)*nxc+nxc]))) 
             
                 # new implicit function values
-                fI[(m+1)*nxc:(m+1)*nxc+nxc] = AIc.dot(uc_new[(m+1)*nxc:(m+1)*nxc+nxc])
+                fI[(m+1)*nxc:(m+1)*nxc+nxc] = ifft(AIc.dot(fft(uc_new[(m+1)*nxc:(m+1)*nxc+nxc])))
                 
                    
     return uc_new
@@ -348,42 +351,37 @@ def fine_sweep(AEf, AIf, dt, dtf, func, Mf, nF, nu, nxf, Sf, Qf, tf_int, typeODE
         # IMEX Version (advection diffusion equation)- uses the iterative method with S and SE
         
         # Initialisations
-        uf_new = np.zeros(Mf * nxf, dtype='cfloat')
-        fE = np.zeros(Mf * nxf, dtype='cfloat')
-        fI = np.zeros(Mf * nxf, dtype='cfloat')
+        uf_new = np.zeros(Mf * nxf, dtype='float')
+        fE = np.zeros(Mf * nxf, dtype='float')
+        fI = np.zeros(Mf * nxf, dtype='float')
             
         uf_new = ufIter
             
         for n in range(0, nF):
-            #for m in range(0, Mf):
-            #    um = ifft(uf_new[m*nxf:m*nxf+nxf])
-            #    print("Sweep function routine uf:", um[0:10])
                 
             # Compute integrals
             Skmf = np.zeros((Mf - 1) * nxf, dtype='cfloat')
             for l in range(0, Mf-1):
                 for j in range(0, Mf):
-                    Skmf[l*nxf:l*nxf+nxf] += dt * Sf[l, j] * (AEf.dot(uf_new[j*nxf:j*nxf+nxf]) + AIf.dot(uf_new[j*nxf:j*nxf+nxf]))
-                    
-                #print("Sweep function routine:", ifft(Skmf[l*nxf:l*nxf+nxf])[0:10])
-                                            
+                    Skmf[l*nxf:l*nxf+nxf] += dt * Sf[l, j] * (ifft(AEf.dot(fft(uf_new[j*nxf:j*nxf+nxf]))) + ifft(AIf.dot(fft(uf_new[j*nxf:j*nxf+nxf]))))
+                                                                
             uf_new[0:nxf] = uf_M
             
-            fE[0:nxf] = AEf.dot(uf_M)     
+            fE[0:nxf] = ifft(AEf.dot(uf_M))     
             
-            fI[0:nxf] = AIf.dot(uf_M)
+            fI[0:nxf] = ifft(AIf.dot(uf_M))
             
             # sweep
             for m in range(0, Mf-1):
-                rhs = uf_new[m*nxf:m*nxf+nxf] + dtf[m] * (fE[m*nxf:m*nxf+nxf] - AEf.dot(uf_new[m*nxf:m*nxf+nxf]) - AIf.dot(uf_new[(m+1)*nxf:(m+1)*nxf+nxf])) + Skmf[m*nxf:m*nxf+nxf]
+                rhs = uf_new[m*nxf:m*nxf+nxf] + dtf[m] * (fE[m*nxf:m*nxf+nxf] - ifft(AEf.dot(fft(uf_new[m*nxf:m*nxf+nxf]))) - ifft(AIf.dot(fft(uf_new[(m+1)*nxf:(m+1)*nxf+nxf])))) + Skmf[m*nxf:m*nxf+nxf]
             
-                uf_new[(m+1)*nxf:(m+1)*nxf+nxf] = np.linalg.solve(np.identity(nxf) - dtf[m] * AIf, rhs)
+                tmp = np.linalg.solve(np.identity(nxf) - dtf[m] * AIf, fft(rhs))
+                uf_new[(m+1)*nxf:(m+1)*nxf+nxf] = ifft(tmp)
             
                 # new explicit function values
-                fE[(m+1)*nxf:(m+1)*nxf+nxf] = AEf.dot(uf_new[(m+1)*nxf:(m+1)*nxf+nxf]) 
+                fE[(m+1)*nxf:(m+1)*nxf+nxf] = ifft(AEf.dot(fft(uf_new[(m+1)*nxf:(m+1)*nxf+nxf]))) 
             
                 # new implicit function values
-                fI[(m+1)*nxf:(m+1)*nxf+nxf] = AIf.dot(uf_new[(m+1)*nxf:(m+1)*nxf+nxf])
-     
-    
+                fI[(m+1)*nxf:(m+1)*nxf+nxf] = ifft(AIf.dot(fft(uf_new[(m+1)*nxf:(m+1)*nxf+nxf])))
+         
     return uf_new
