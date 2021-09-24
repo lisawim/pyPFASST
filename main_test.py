@@ -5,6 +5,7 @@ from ic_test import ic
 from exact_sol_test import exact_sol
 from Euler import expEuler, impEuler
 from pfasst2_test import pfasst
+#from pfasst_test import pfasst
 from pfasst_coarsesweeps_test import pfasst_coarsesweeps
 from int_nodes_test import int_nodes
 from differential_operators_test import differentialA
@@ -89,19 +90,34 @@ for l in range(0, nt-1):
 
 for l in range(0, nt-1):
     tc[Mc*l:Mc*l + Mc] = int_nodes(t[l], t[l+1], Mc)
-    
-dtf = np.zeros((N * Mf))
-dtc = np.zeros((N * Mc))
+
+dtf = np.zeros(Mf)
+dtc = np.zeros(Mc)
 
 ndtf = np.shape(dtf)[0]
 ndtc = np.shape(dtc)[0]
 
 # determination of the fine and coarse time steps
-for j in range(0, ndtf-1):
+for j in range(0, Mf):
     dtf[j] = tf[j+1]-tf[j]
 
-for j in range(0, ndtc-1):
+for j in range(0, Mc):
     dtc[j] = tc[j+1] - tc[j]
+
+
+#for m in range(0, ndtf):
+#    if m == 0:
+#        dtf[m] = 0
+    
+#    else:
+#        dtf[m] = tf[m]-tf[m-1]
+        
+#for m in range(0, ndtc):
+#    if m == 0:
+#        dtc[m] = 0
+    
+#    else:
+#        dtc[m] = tc[m]-tc[m-1]
     
 dtf2 = dtf[0:Mf-1]
 dtc2 = dtc[0:Mc-1]
@@ -122,7 +138,10 @@ u0c, L = ic(xc, func, nu)
 nG = 1
 
 # number of PFASST iterations
-K = 0
+K = 1
+
+# Prediction to find a better initial condition
+prediction_on = True
 
 if rank == 0:
     print()
@@ -140,7 +159,7 @@ if rank == 0:
 
 # PFASST output
 if typeODE == 'heat' or typeODE == 'heat_forced' or typeODE == 'Burgers' or typeODE == 'advdif':
-    AIf, AIc, uf_M, uc_M, uhat_solveM = pfasst(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf)
+    AIf, AIc, uf_M, uc_M, uhat_solveM = pfasst(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf)
     
     #AIf, AIc, ufhat_M, uchat_M = pfasst_coarsesweeps(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, Mc, Mf, rank, size, tc, tf, typeODE, u0c, u0f, xc, xf)
     

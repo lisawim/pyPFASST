@@ -181,12 +181,11 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         tau = dt * (restr_QF - QFc)
         
     elif typeODE == 'advdif':
-        tau = np.zeros(nxc * (Mc-1), dtype='float')
+        # 'node to node'
+        #tau = np.zeros(nxc * (Mc-1), dtype='float')
         
-        #for m in range(0, Mf):
-        #    tmp = ufhat[m*nxf:m*nxf+nxf]
-        #    print(ifft(tmp)[:10])
-        #    print()
+        # 't0 to node'
+        tau = np.zeros(nxc * Mc, dtype='float')
         
         # restrict fine u in space and time
         tmp_u = np.zeros(Mf*nxc, dtype='float')
@@ -201,9 +200,6 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         # Evaluation of function values on coarse level                          
         fevalc = np.zeros(nxc * Mc, dtype='float')
         for m in range(0, Mc):
-            #fevalc[m*nxc:m*nxc + nxc] = AEc.dot(uchat[m*nxc:m*nxc + nxc]) + AIc.dot(uchat[m*nxc:m*nxc + nxc])
-            #fevalc[m*nxc:m*nxc + nxc] = AEc.dot(tmp2_u[m*nxc:m*nxc + nxc]) + AIc.dot(tmp2_u[m*nxc:m*nxc + nxc])
-            #fevalc[m*nxc:m*nxc + nxc] = np.fft.ifft(fevalc[m*nxc:m*nxc + nxc])
             fevalc[m*nxc:m*nxc + nxc] = fexplc[m*nxc:m*nxc+nxc] + fimplc[m*nxc:m*nxc+nxc]
         
         # Integrate from 't0 to node' on coarse level
@@ -221,7 +217,6 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         # Evaluation of function values on fine level
         fevalf = np.zeros(nxf * Mf, dtype='float')            
         for m in range(0, Mf):
-            #fevalf[m*nxf:m*nxf + nxf] = AEf.dot(ufhat[m*nxf:m*nxf + nxf]) + AIf.dot(ufhat[m*nxf:m*nxf + nxf])
             fevalf[m*nxf:m*nxf+nxf] = fexplf[m*nxf:m*nxf+nxf] + fimplf[m*nxf:m*nxf+nxf]
         
         # Integrate from 't0 to node' on fine level
@@ -229,13 +224,6 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         for l in range(0, Mf):
             for j in range(0, Mf):
                 Qf_int[l*nxf:l*nxf+nxf] += dt * Qf[l, j] * fevalf[j*nxf:j*nxf+nxf]
-        
-        np.set_printoptions(precision=20)
-        #for m in range(0, Mf):
-        #    print("m=", m)
-        #    tmp = Qf_int[m*nxf:m*nxf+nxf]
-        #    print(tmp[:10])
-        #    print()
                     
         # Restrict the integral of fine function values in space and time
         restr_QF = restriction(Qf_int, Mc, nxc, Mf, nxf)
@@ -244,29 +232,16 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         for m in range(0, Mc):
             tmp_tau[m*nxc:m*nxc+nxc] = restr_QF[m*nxc:m*nxc+nxc] - Qc_int[m*nxc:m*nxc+nxc]
         
-        tmp_tau = (restr_QF - Qc_int)
-        
-        #for m in range(0, Mc):
-            #print()
-            #print(tmp_tau[m*nxc:m*nxc+nxc][:10])
-            #print("restr_QF=", restr_QF[m*nxc:m*nxc+nxc][:10])
-            #print("Qc_int=", tmp_Qc_int[m*nxc:m*nxc+nxc][:10])
-            #print()
-            
-        #for m in range(0, Mc):
-        #    tmp = Qc_int[m*nxc:m*nxc+nxc]
-            #tmp = tmp2_u[m*nxc:m*nxc+nxc]
-        #    print("Qc_int=", tmp[:10])
-        #    print()
+        # tau with 't0 to node'
+        tau = (restr_QF - Qc_int)
         
         # Conversion to 'node to node'
-        for m in range(0, Mc-1):
-            restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
-            #QFc[m*nxc:m*nxc+nxc] = QFc[(m+1)*nxc:(m+1)*nxc+nxc] - QFc[m*nxc:m*nxc+nxc]
-            Qc_int[m*nxc:m*nxc+nxc] = Qc_int[(m+1)*nxc:(m+1)*nxc+nxc] - Qc_int[m*nxc:m*nxc+nxc]
+        #for m in range(0, Mc-1):
+        #    restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
+        #    Qc_int[m*nxc:m*nxc+nxc] = Qc_int[(m+1)*nxc:(m+1)*nxc+nxc] - Qc_int[m*nxc:m*nxc+nxc]
         
-        #tau = dt * (restr_QF - QFc)
-        tau = restr_QF - Qc_int
+        # tau with 'node to node'
+        #tau = restr_QF - Qc_int
 
         
     return tau

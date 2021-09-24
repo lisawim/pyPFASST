@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
 import warnings
 warnings.filterwarnings('ignore')
+import sys
 
-def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf):
+def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf):
     
     # initialization of vector of solution values and vector of function values of solution values
     uf = np.zeros(nxf * Mf, dtype='float')
@@ -33,10 +34,6 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
         uc = restriction(uf, Mc, nxc, Mf, nxf)
         uc_init = uc
         
-        #for m in range(0, Mc):
-        #    print(uc[m*nxc:m*nxc+nxc][:10])
-        #    print()
-        
     else:
         uf = None
         uc = None
@@ -50,12 +47,6 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
     if rank == 0:
         AEf, AIf = differentialA(L, nu, nxf, typeODE, v)
         AEc, AIc = differentialA(L, nu, nxc, typeODE, v)
-        
-        #print("Explizit")
-        #for m in range(0, Mc):
-        #    tmp = ifft(AEc.dot(fft(uc[m*nxc:m*nxc+nxc])))
-        #    print(tmp[:10])
-        #    print()
         
     else:
         AEf = None
@@ -83,33 +74,42 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
     u_M_solve = np.zeros(nxf, dtype='float')
     u_M_solve = u0f
     
-    # INITIALIZATION PROCEDURE
-    for j in range(0, rank+1):
-
-        # Step (1)
-        if (j > 0 and rank > 0):
-            uc_MTilde = comm.recv(source=rank-1, tag=j-1)
-            
-        else:
-            uc_MTilde = u0c
-            
-        # Step (2) - Coarse SDC sweep
-        uc = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, tau, tc[rank*Mc:rank*Mc+Mc], typeODE, uc, uc_MTilde, xc)
-            
-        # Step (3)    
-        if rank < (size - 1):
-            comm.send(uc[Mc*nxc-nxc:Mc*nxc], dest=rank+1, tag=j)
     
-    # for each rank a resolved run for each substep with SDC is computed to calculate errors - the actual value uhat isn't required (for directIMEX)
+    # Prediction phase
+    if prediction_on == True:
+    
+
+        for j in range(0, rank+1):
+    
+            # Step (1)
+            # Default tag j-1
+            if (j > 0 and rank > 0):
+                uc_MTilde = comm.recv(source=rank-1, tag=j-1)
+            
+            else:
+                uc_MTilde = u0c
+            
+            # Step (2) - Coarse SDC sweep
+            uc = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, QEc, QIc, tau, tc[rank*Mc:rank*Mc+Mc], typeODE, uc, uc_MTilde, xc)
+                   
+            # Step (3) Default tag j   
+            if rank < (size - 1):
+                comm.send(uc[Mc*nxc-nxc:Mc*nxc], dest=rank+1, tag=j)
+            
+        uf = uf + interpolation(uc - uc_init, u0c - uc_MTilde, dtf, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf + Mf])
+    
+        uf = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, QEf, QIf, tf[rank*Mf:rank*Mf+Mf], typeODE, uf, u0f, xf)
+        
+    else:
+        pass
+    
+    
+    # single SDC on fine level
     #if K > 0:
     #    for j in range(0, rank+1):
     #        uhat_solve = single_SDC(AEf, AIf, dtf, func, K, L, Mf, nu, nxf, rank, dt, typeODE, tf[j*Mf:j*Mf+Mf], ufhat, u_M_solve, xf)
             
     #        u_M_solve = uhat_solve[Mf*nxf - nxf:Mf*nxf]
-    
-    uf = uf + interpolation(uc - uc_init, u0c - uc_MTilde, dtf, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf + Mf])
-    
-    uf = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, tf[rank*Mf:rank*Mf+Mf], typeODE, uf, u0f, xf)
     
     # PFASST ITERATIONS
     for k in range(1, K+1):
@@ -130,7 +130,7 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
             uc_MTilde = u0c
             
         # nG coarse SDC sweeps
-        uc_prime = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, tau_PFASST, tc[rank*Mc:rank*Mc+Mc], typeODE, uc, uc_MTilde, xc)
+        uc_prime = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, QEc, QIc, tau_PFASST, tc[rank*Mc:rank*Mc+Mc], typeODE, uc, uc_MTilde, xc)
         
         # send initial value to next process
         if rank < (size - 1):
@@ -143,6 +143,7 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
         delta = interpolation(uc_prime - uc, np.zeros(nxc), dtf, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf + Mf])
         
         uf_prime = uf + delta
+        #print(rank, type(delta[Mf*nxf-1]))
         
         # interpolate coarse correction
         #delta1 = interpolation(uchat_prime[0:nxc] - uchat[0:nxc], np.zeros(nxc), dtf, Mc, nxc, Mf, nxf, tf[rank*Mf:rank*Mf + Mf])
@@ -159,10 +160,12 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
         else:
             uf_M = u0f
         
+        #print(rank, type(uf_prime[Mf*nxf-nxf]))
+        
         uf_prime[Mf*nxf-nxf:Mf*nxf] = uf[Mf*nxf-nxf:Mf*nxf] + delta1
         
         # fine Sweep
-        uf = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, tf[rank*Mf:rank*Mf+Mf], typeODE, uf_prime, uf_M, xf)
+        uf = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, QEf, QIf, tf[rank*Mf:rank*Mf+Mf], typeODE, uf_prime, uf_M, xf)
             
             
     # returns only the solution at end of sub intervals
