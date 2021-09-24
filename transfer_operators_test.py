@@ -1,5 +1,5 @@
 import numpy as np
-from numpy.fft import fft, ifft
+from numpy.fft import fft, ifft, rfft, irfft
 import scipy
 from scipy import signal
 import warnings
@@ -26,52 +26,47 @@ def interpolation(u, u_M, dtf, Mc, nxc, Mf, nxf, tc, tf):
     
         
     uInt = np.zeros(nxf * Mf, dtype='float')
-    tmp_u = np.zeros(nxc * Mc, dtype='cfloat')
-    tmp_uf = np.zeros(nxf, dtype=np.complex128)
+    tmp_u = np.zeros((nxf//2)+1, dtype='cfloat')
         
     # First, a spatial interpolation is used with FFT
+    tmp_uf0 = np.zeros((nxf//2)+1, dtype='cfloat')
+    tmp_uf2 = np.zeros((nxf//2)+1, dtype='cfloat')
+    tmp_uf4 = np.zeros((nxf//2)+1, dtype='cfloat')
     uf0 = np.zeros(nxf, dtype='float')
+    uf1 = np.zeros(nxf, dtype='float')
     uf2 = np.zeros(nxf, dtype='float')
+    uf3 = np.zeros(nxf, dtype='float')
     uf4 = np.zeros(nxf, dtype='float')
     
     
     if np.shape(u)[0] == nxc:
-        tmp_u = fft(u)
+
         uInt = np.zeros(nxf, dtype='float')
         
-        #tmp_uf[0:nxc//2] = tmp_u[0:nxc//2]
-        #tmp_uf[-1] = tmp_u[-1]
+        tmp = rfft(u)
         
-        #uInt = ifft(2*tmp_uf)
+        tmp_u[0:nxc//2] = tmp[0:nxc//2]
+        tmp_u[-1] = tmp[-1]
         
-        # Only a spatial interpolation is done
-        uInt[0:nxc//2] = tmp_u[0:nxc//2]
-        uInt[3*nxc//2:nxf] = tmp_u[nxc//2:nxc]
-        
-        uInt = ifft(2*uInt)
+        uInt = irfft(tmp_u * 2)
         
     else:
-        for m in range(0, Mc):
-            tmp_u[m*nxc:m*nxc+nxc] = fft(u[m*nxc:m*nxc+nxc])
-            
-        uf0[0:nxc//2] = tmp_u[0:nxc//2]
-        uf2[0:nxc//2] = tmp_u[nxc:nxc+nxc//2]
-        uf4[0:nxc//2] = tmp_u[2*nxc:2*nxc+nxc//2]
         
-        uf0[3*nxc//2:nxf] = tmp_u[nxc//2:nxc]
-        uf2[3*nxc//2:nxf] = tmp_u[nxc+nxc//2:2*nxc]
-        uf4[3*nxc//2:nxf] = tmp_u[2*nxc+nxc//2:3*nxc]
+        tmp_uc0 = rfft(u[0:nxc])
+        tmp_uc2 = rfft(u[nxc:2*nxc])
+        tmp_uc4 = rfft(u[2*nxc:3*nxc])
         
-        #uf0[-1] = tmp_u[nxc-1]
-        #uf2[-1] = tmp_u[2*nxc-1]
-        #uf4[-1] = tmp_u[3*nxc-1]
+        tmp_uf0[0:nxc//2] = tmp_uc0[0:nxc//2]
+        tmp_uf2[0:nxc//2] = tmp_uc2[0:nxc//2]
+        tmp_uf4[0:nxc//2] = tmp_uc4[0:nxc//2]
         
-        uf0 = ifft(2*uf0)
-        uf2 = ifft(2*uf2)
-        uf4 = ifft(2*uf4)
-
-        uf1 = np.zeros(nxf, dtype='float')
-        uf3 = np.zeros(nxf, dtype='float')
+        tmp_uf0[-1] = tmp_uc0[-1]
+        tmp_uf2[-1] = tmp_uc2[-1]
+        tmp_uf4[-1] = tmp_uc4[-1]
+        
+        uf0 = irfft(2 * tmp_uf0)
+        uf2 = irfft(2 * tmp_uf2)
+        uf4 = irfft(2 * tmp_uf4)
                        
         for l in range(0, nxf):
             uf1[l] = polynomial_interpolation(tf[0], uf0[l], tf[2], uf2[l], tf[4], uf4[l], tf[1])
