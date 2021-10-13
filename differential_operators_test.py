@@ -22,7 +22,7 @@ def differentialA(L, nu, nx, typeODE, v):
         a = np.arange(0, (nx - 1)/2 + 1)
         b = np.arange(-(nx - 1)/2, 0)
     
-    # Gradient 
+
     AE = np.zeros((nx, nx), dtype='cfloat')
     AI = np.zeros((nx, nx), dtype='cfloat')
     

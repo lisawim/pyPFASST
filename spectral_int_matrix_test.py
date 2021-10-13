@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 from scipy.integrate import quad
 from int_nodes_test import int_nodes
+from scipy.interpolate import BarycentricInterpolator
 
 def spectral_int_matrix(M, dt, dt_int, t_int):
     # Input:
@@ -49,30 +50,17 @@ def spectral_int_matrix(M, dt, dt_int, t_int):
         l1 = lambda x: (x-t_int[0])/(t_int[1]-t_int[0]) * (x-t_int[2])/(t_int[1]-t_int[2])
         l2 = lambda x: (x-t_int[0])/(t_int[2]-t_int[0]) * (x-t_int[1])/(t_int[2]-t_int[1])
             
-        #Q[0, 0] = sp.integrate.quad(l0, t_int[0], t_int[0])[0]
-        #Q[0, 1] = sp.integrate.quad(l1, t_int[0], t_int[0])[0]
-        #Q[0, 2] = sp.integrate.quad(l2, t_int[0], t_int[0])[0]
+        Q[0, 0] = sp.integrate.quad(l0, t_int[0], t_int[0])[0]
+        Q[0, 1] = sp.integrate.quad(l1, t_int[0], t_int[0])[0]
+        Q[0, 2] = sp.integrate.quad(l2, t_int[0], t_int[0])[0]
             
-        #Q[1, 0] = sp.integrate.quad(l0, t_int[0], t_int[1])[0]
-        #Q[1, 1] = sp.integrate.quad(l1, t_int[0], t_int[1])[0]
-        #Q[1, 2] = sp.integrate.quad(l2, t_int[0], t_int[1])[0]
+        Q[1, 0] = sp.integrate.quad(l0, t_int[0], t_int[1])[0]
+        Q[1, 1] = sp.integrate.quad(l1, t_int[0], t_int[1])[0]
+        Q[1, 2] = sp.integrate.quad(l2, t_int[0], t_int[1])[0]
             
-        #Q[2, 0] = sp.integrate.quad(l0, t_int[0], t_int[2])[0]
-        #Q[2, 1] = sp.integrate.quad(l1, t_int[0], t_int[2])[0]
-        #Q[2, 2] = sp.integrate.quad(l2, t_int[0], t_int[2])[0]
-        
-        # use instead the Barycentric formula
-        Q[0, 0] = 0.0
-        Q[0, 1] = 0.0
-        Q[0, 2] = 0.0
-        
-        Q[1, 0] = 0.20833333333333331
-        Q[1, 1] = 0.33333333333333326
-        Q[1, 2] = -0.04166666666666665
-        
-        Q[2, 0] = 0.16666666666666674
-        Q[2, 1] = 0.6666666666666664
-        Q[2, 2] = 0.16666666666666674
+        Q[2, 0] = sp.integrate.quad(l0, t_int[0], t_int[2])[0]
+        Q[2, 1] = sp.integrate.quad(l1, t_int[0], t_int[2])[0]
+        Q[2, 2] = sp.integrate.quad(l2, t_int[0], t_int[2])[0]
         
         S[0, 0] = sp.integrate.quad(l0, t_int[0], t_int[1])[0]
         S[0, 1] = sp.integrate.quad(l1, t_int[0], t_int[1])[0]
@@ -82,6 +70,42 @@ def spectral_int_matrix(M, dt, dt_int, t_int):
         S[1, 1] = sp.integrate.quad(l1, t_int[1], t_int[2])[0]
         S[1, 2] = sp.integrate.quad(l2, t_int[1], t_int[2])[0]
         
+        #Q[0, 0] = 0.0
+        #Q[0, 1] = 0.0
+        #Q[0, 2] = 0.0
+            
+        #Q[1, 0] = 0.20833333333333331
+        #Q[1, 1] = 0.33333333333333326
+        #Q[1, 2] = -0.04166666666666665
+            
+        #Q[2, 0] = 0.16666666666666674
+        #Q[2, 1] = 0.6666666666666664
+        #Q[2, 2] = 0.16666666666666674
+        
+        #QI[0, 0] = 0.0
+        #QI[0, 1] = 0.0 
+        #QI[0, 2] = 0.0
+            
+        #QI[1, 0] = 0.0
+        #QI[1, 1] = 0.5
+        #QI[1, 2] = 0.0
+            
+        #QI[2, 0] = 0.0
+        #QI[2, 1] = 0.5
+        #QI[2, 2] = 0.5
+        
+        #QE[0, 0] = 0.0
+        #QE[0, 1] = 0.0
+        #QE[0, 2] = 0.0
+            
+        #QE[1, 0] = 0.5
+        #QE[1, 1] = 0.0
+        #QE[1, 2] = 0.0
+            
+        #QE[2, 0] = 0.5
+        #QE[2, 1] = 0.5
+        #QE[2, 2] = 0.0
+        
             
     elif M == 5:
         l0 = lambda x: (x-t_int[1])/(t_int[0]-t_int[1]) * (x-t_int[2])/(t_int[0]-t_int[2]) * (x-t_int[3])/(t_int[0]-t_int[3]) * (x-t_int[4])/(t_int[0]-t_int[4])
@@ -90,66 +114,65 @@ def spectral_int_matrix(M, dt, dt_int, t_int):
         l3 = lambda x: (x-t_int[0])/(t_int[3]-t_int[0]) * (x-t_int[1])/(t_int[3]-t_int[1]) * (x-t_int[2])/(t_int[3]-t_int[2]) * (x-t_int[4])/(t_int[3]-t_int[4])
         l4 = lambda x: (x-t_int[0])/(t_int[4]-t_int[0]) * (x-t_int[1])/(t_int[4]-t_int[1]) * (x-t_int[2])/(t_int[4]-t_int[2]) * (x-t_int[3])/(t_int[4]-t_int[3])
             
-        #Q[0, 0] = sp.integrate.quad(l0, t_int[0], t_int[0])[0]
-        #Q[0, 1] = sp.integrate.quad(l1, t_int[0], t_int[0])[0]
-        #Q[0, 2] = sp.integrate.quad(l2, t_int[0], t_int[0])[0]
-        #Q[0, 3] = sp.integrate.quad(l3, t_int[0], t_int[0])[0]
-        #Q[0, 4] = sp.integrate.quad(l4, t_int[0], t_int[0])[0]
+        Q[0, 0] = sp.integrate.quad(l0, t_int[0], t_int[0])[0]
+        Q[0, 1] = sp.integrate.quad(l1, t_int[0], t_int[0])[0]
+        Q[0, 2] = sp.integrate.quad(l2, t_int[0], t_int[0])[0]
+        Q[0, 3] = sp.integrate.quad(l3, t_int[0], t_int[0])[0]
+        Q[0, 4] = sp.integrate.quad(l4, t_int[0], t_int[0])[0]
             
-        #Q[1, 0] = sp.integrate.quad(l0, t_int[0], t_int[1])[0]
-        #Q[1, 1] = sp.integrate.quad(l1, t_int[0], t_int[1])[0]
-        #Q[1, 2] = sp.integrate.quad(l2, t_int[0], t_int[1])[0]
-        #Q[1, 3] = sp.integrate.quad(l3, t_int[0], t_int[1])[0]
-        #Q[1, 4] = sp.integrate.quad(l4, t_int[0], t_int[1])[0]
+        Q[1, 0] = sp.integrate.quad(l0, t_int[0], t_int[1])[0]
+        Q[1, 1] = sp.integrate.quad(l1, t_int[0], t_int[1])[0]
+        Q[1, 2] = sp.integrate.quad(l2, t_int[0], t_int[1])[0]
+        Q[1, 3] = sp.integrate.quad(l3, t_int[0], t_int[1])[0]
+        Q[1, 4] = sp.integrate.quad(l4, t_int[0], t_int[1])[0]
             
-        #Q[2, 0] = sp.integrate.quad(l0, t_int[0], t_int[2])[0]
-        #Q[2, 1] = sp.integrate.quad(l1, t_int[0], t_int[2])[0]
-        #Q[2, 2] = sp.integrate.quad(l2, t_int[0], t_int[2])[0]
-        #Q[2, 3] = sp.integrate.quad(l3, t_int[0], t_int[2])[0]
-        #Q[2, 4] = sp.integrate.quad(l4, t_int[0], t_int[2])[0]
+        Q[2, 0] = sp.integrate.quad(l0, t_int[0], t_int[2])[0]
+        Q[2, 1] = sp.integrate.quad(l1, t_int[0], t_int[2])[0]
+        Q[2, 2] = sp.integrate.quad(l2, t_int[0], t_int[2])[0]
+        Q[2, 3] = sp.integrate.quad(l3, t_int[0], t_int[2])[0]
+        Q[2, 4] = sp.integrate.quad(l4, t_int[0], t_int[2])[0]
             
-        #Q[3, 0] = sp.integrate.quad(l0, t_int[0], t_int[3])[0]
-        #Q[3, 1] = sp.integrate.quad(l1, t_int[0], t_int[3])[0]
-        #Q[3, 2] = sp.integrate.quad(l2, t_int[0], t_int[3])[0]
-        #Q[3, 3] = sp.integrate.quad(l3, t_int[0], t_int[3])[0]
-        #Q[3, 4] = sp.integrate.quad(l4, t_int[0], t_int[3])[0]
+        Q[3, 0] = sp.integrate.quad(l0, t_int[0], t_int[3])[0]
+        Q[3, 1] = sp.integrate.quad(l1, t_int[0], t_int[3])[0]
+        Q[3, 2] = sp.integrate.quad(l2, t_int[0], t_int[3])[0]
+        Q[3, 3] = sp.integrate.quad(l3, t_int[0], t_int[3])[0]
+        Q[3, 4] = sp.integrate.quad(l4, t_int[0], t_int[3])[0]
             
-        #Q[4, 0] = sp.integrate.quad(l0, t_int[0], t_int[4])[0]
-        #Q[4, 1] = sp.integrate.quad(l1, t_int[0], t_int[4])[0]
-        #Q[4, 2] = sp.integrate.quad(l2, t_int[0], t_int[4])[0]
-        #Q[4, 3] = sp.integrate.quad(l3, t_int[0], t_int[4])[0]
-        #Q[4, 4] = sp.integrate.quad(l4, t_int[0], t_int[4])[0]
+        Q[4, 0] = sp.integrate.quad(l0, t_int[0], t_int[4])[0]
+        Q[4, 1] = sp.integrate.quad(l1, t_int[0], t_int[4])[0]
+        Q[4, 2] = sp.integrate.quad(l2, t_int[0], t_int[4])[0]
+        Q[4, 3] = sp.integrate.quad(l3, t_int[0], t_int[4])[0]
+        Q[4, 4] = sp.integrate.quad(l4, t_int[0], t_int[4])[0]
         
-        # use instead the Barycentric formula
-        Q[0, 0] = 0.0
-        Q[0, 1] = 0.0
-        Q[0, 2] = 0.0
-        Q[0, 3] = 0.0
-        Q[0, 4] = 0.0
+        #Q[0, 0] = 0.0
+        #Q[0, 1] = 0.0
+        #Q[0, 2] = 0.0
+        #Q[0, 3] = 0.0
+        #Q[0, 4] = 0.0
             
-        Q[1, 0] = 0.06772843218615689
-        Q[1, 1] = 0.11974476934341162
-        Q[1, 2] = -0.021735721866558082
-        Q[1, 3] = 0.01063582422541548
-        Q[1, 4] = -0.0037001392424145293
+        #Q[1, 0] = 0.06772843218615689
+        #Q[1, 1] = 0.11974476934341162
+        #Q[1, 2] = -0.021735721866558082
+        #Q[1, 3] = 0.01063582422541548
+        #Q[1, 4] = -0.0037001392424145293
             
-        Q[2, 0] = 0.04062499999999991         
-        Q[2, 1] = 0.30318418332304287
-        Q[2, 2] = 0.17777777777777784
-        Q[2, 3] = -0.030961961100820615
-        Q[2, 4] = 0.009375000000000026
+        #Q[2, 0] = 0.04062499999999991
+        #Q[2, 1] = 0.30318418332304287
+        #Q[2, 2] = 0.17777777777777784
+        #Q[2, 3] = -0.030961961100820615
+        #Q[2, 4] = 0.009375000000000026
             
-        Q[3, 0] = 0.053700139242414444               
-        Q[3, 1] = 0.2615863979968068
-        Q[3, 2] = 0.3772912774221137
-        Q[3, 3] = 0.1524774528788106
-        Q[3, 4] = -0.017728432186156915
+        #Q[3, 0] = 0.053700139242414444
+        #Q[3, 1] = 0.2615863979968068
+        #Q[3, 2] = 0.3772912774221137
+        #Q[3, 3] = 0.1524774528788106 
+        #Q[3, 4] = -0.017728432186156915
             
-        Q[4, 0] = 0.04999999999999991
-        Q[4, 1] = 0.27222222222222214
-        Q[4, 2] = 0.35555555555555585
-        Q[4, 3] = 0.27222222222222225
-        Q[4, 4] = 0.04999999999999985
+        #Q[4, 0] = 0.04999999999999991        
+        #Q[4, 1] = 0.27222222222222214
+        #Q[4, 2] = 0.35555555555555585
+        #Q[4, 3] = 0.27222222222222225
+        #Q[4, 4] = 0.04999999999999985
             
         S[0, 0] = sp.integrate.quad(l0, t_int[0], t_int[1])[0]
         S[0, 1] = sp.integrate.quad(l1, t_int[0], t_int[1])[0]
@@ -174,11 +197,71 @@ def spectral_int_matrix(M, dt, dt_int, t_int):
         S[3, 2] = sp.integrate.quad(l2, t_int[3], t_int[4])[0]
         S[3, 3] = sp.integrate.quad(l3, t_int[3], t_int[4])[0]
         S[3, 4] = sp.integrate.quad(l4, t_int[3], t_int[4])[0]
+        
+        #QI[0, 0] = 0.0
+        #QI[0, 1] = 0.0
+        #QI[0, 2] = 0.0 
+        #QI[0, 3] = 0.0
+        #QI[0, 4] = 0.0
+            
+        #QI[1, 0] = 0.0
+        #QI[1, 1] = 0.17267316464601135
+        #QI[1, 2] = 0.0
+        #QI[1, 3] = 0.0
+        #QI[1, 4] = 0.0
+            
+        #QI[2, 0] = 0.0
+        #QI[2, 1] = 0.17267316464601135
+        #QI[2, 2] = 0.32732683535398865
+        #QI[2, 3] = 0.0
+        #QI[2, 4] = 0.0
+            
+        #QI[3, 0] = 0.0
+        #QI[3, 1] = 0.17267316464601135
+        #QI[3, 2] = 0.32732683535398865
+        #QI[3, 3] = 0.32732683535398865
+        #QI[3, 4] = 0.0
+            
+        #QI[4, 0] = 0.0
+        #QI[4, 1] = 0.17267316464601135
+        #QI[4, 2] = 0.32732683535398865
+        #QI[4, 3] = 0.32732683535398865
+        #QI[4, 4] = 0.17267316464601135
+        
+        #QE[0, 0] = 0.0
+        #QE[0, 1] = 0.0
+        #QE[0, 2] = 0.0
+        #QE[0, 3] = 0.0
+        #QE[0, 4] = 0.0
+            
+        #QE[1, 0] = 0.17267316464601135
+        #QE[1, 1] = 0.0
+        #QE[1, 2] = 0.0
+        #QE[1, 3] = 0.0
+        #QE[1, 4] = 0.0
+            
+        #QE[2, 0] = 0.17267316464601135
+        #QE[2, 1] = 0.32732683535398865
+        #QE[2, 2] = 0.0
+        #QE[2, 3] = 0.0
+        #QE[2, 4] = 0.0
+            
+        #QE[3, 0] = 0.17267316464601135
+        #QE[3, 1] = 0.32732683535398865
+        #QE[3, 2] = 0.32732683535398865
+        #QE[3, 3] = 0.0
+        #QE[3, 4] = 0.0
+            
+        #QE[4, 0] = 0.17267316464601135
+        #QE[4, 1] = 0.32732683535398865
+        #QE[4, 2] = 0.32732683535398865
+        #QE[4, 3] = 0.17267316464601135
+        #QE[4, 4] = 0.0
     
     
             
-    #S = (1/dt) * S    
-    #Q = (1/dt) * Q
+    S = (1/dt) * S    
+    Q = (1/dt) * Q
     
     # SE, SI integrate 'node to node'
     #for i in range(0, M-1):
@@ -193,17 +276,15 @@ def spectral_int_matrix(M, dt, dt_int, t_int):
                 #SI[i, j] = dt_int[j-1]/dt
     #            SI[i, j] = dt_int[j-1]
     
-    #for i in range(0, M):
-    #    for j in range(0, M):
-    #        if j <= (i-1):
-                #QE[i, j] = dt_int[j]/dt
-    #            QE[i, j] = dt_int[j]
+    for i in range(0, M):
+        for j in range(0, M):
+            if j <= (i-1):
+                QE[i, j] = dt_int[j]/dt
                 
-    #for i in range(0, M):
-    #    for j in range(0, M):
-    #        if j>0 and j<=i:
-                #QI[i, j] = dt_int[j-1]/dt
-    #            QI[i, j] = dt_int[j-1]
+    for i in range(0, M):
+        for j in range(0, M):
+            if j>0 and j<=i:
+                QI[i, j] = dt_int[j-1]/dt
                 
     S2[0, :] = Q[1, :]
     
