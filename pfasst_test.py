@@ -14,32 +14,32 @@ from sweep_test import coarse_sweep, fine_sweep
 #import matplotlib.pyplot as plt
 #matplotlib.use('TkAgg')
 
-def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size, T, tc, tf, typeODE, u0hatc, u0hatf, v, xc, xf):
+def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf):
     sum = 0
     number = 0
     
     # initialization of vector of solution values and vector of function values of solution values
-    ufhat = np.zeros(nxf * Mf, dtype='cfloat')
-    uchat = np.zeros(nxc * Mc, dtype='cfloat')
-    uchat_init = np.zeros(nxc * Mc, dtype='cfloat')
+    uf = np.zeros(nxf * Mf, dtype='float')
+    uc = np.zeros(nxc * Mc, dtype='float')
+    uc_init = np.zeros(nxc * Mc, dtype='float')
     uhat_solve = np.zeros(nxf * Mf, dtype='cfloat')
     
     # spread initial condition to each collocation node -- restrict fine vector to yield coarse vector
     if rank == 0:
         for m in range(0, Mf):
-            ufhat[m*nxf:m*nxf+nxf] = u0hatf           
+            uf[m*nxf:m*nxf+nxf] = u0f           
             
-        uchat = restriction(ufhat, Mc, nxc, Mf, nxf)
-        uchat_init = uchat
+        uc = restriction(uf, Mc, nxc, Mf, nxf)
+        uc_init = uc
         
     else:
-        ufhat = None
-        uchat = None
-        uchat_init = None
+        uf = None
+        uc = None
+        uc_init = None
            
-    ufhat = comm.bcast(ufhat, root=0)
-    uchat = comm.bcast(uchat, root=0)
-    uchat_init = comm.bcast(uchat_init, root=0)  
+    uf = comm.bcast(uf, root=0)
+    uc = comm.bcast(uc, root=0)
+    uc_init = comm.bcast(uc_init, root=0)  
     
     # define the (constant) coefficient matrices and spread to all processors/ranks
     if rank == 0:
@@ -62,14 +62,14 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
     Qc, QEc, QIc, Sc, SEc, SIc = spectral_int_matrix(Mc, dt, dtc, tc[rank*Mc:rank*Mc+Mc])
 
     # FAS correction term
-    tau = FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf+Mf], typeODE, uchat, ufhat, xc, xf)
+    tau = FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf+Mf], typeODE, uc, uf, xc, xf)
        
-    uc_MTilde = np.zeros(nxc, dtype='cfloat')
-    uc_MTilde = u0hatc
+    uc_MTilde = np.zeros(nxc, dtype='float')
+    uc_MTilde = u0c
     
     # initial value for the resolved run (single-SDC on fine grid)
-    u_M_solve = np.zeros(nxf, dtype='cfloat')
-    u_M_solve = u0hatf
+    u_M_solve = np.zeros(nxf, dtype='float')
+    u_M_solve = u0f
     
     # INITIALIZATION PROCEDURE
     for j in range(0, rank+1):
@@ -79,28 +79,14 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
             uc_MTilde = comm.recv(source=rank-1, tag=j-1)
             
         else:
-            uc_MTilde = u0hatc
+            uc_MTilde = u0c
             
         # Step (2) - Coarse SDC sweep
-        uchat = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, tau, tc[rank*Mc:rank*Mc+Mc], typeODE, uchat, uc_MTilde, xc)
-        
-        #if rank == 0:
-        #    print("Rank 0")
-        #    for m in range(0, Mc):
-        #        uchat_m = ifft(uchat[m*nxc:m*nxc+nxc])
-        #        print()
-        #        print(uchat_m[:10])
-                
-        #if rank == 1:
-        #    print("Rank 1")
-        #    for m in range(0, Mc):
-        #        uchat_m = ifft(uchat[m*nxc:m*nxc+nxc])
-        #        print()
-        #        print(uchat_m[:10])
+        uc = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, QEc, QIc, tau, tc[rank*Mc:rank*Mc+Mc], typeODE, uc, uc_MTilde, xc)
             
         # Step (3)    
         if rank < (size - 1):
-            comm.send(uchat[Mc*nxc-nxc:Mc*nxc], dest=rank+1, tag=j)
+            comm.send(uc[Mc*nxc-nxc:Mc*nxc], dest=rank+1, tag=j)
             
     
     # for each rank a resolved run for each substep with SDC is computed to calculate errors - the actual value uhat isn't required (for directIMEX)
@@ -118,52 +104,52 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size,
     #else:
     #    ufhat = ufhat + interpolation(uchat - uchat_init, u0hatc - uc_MTilde, dtf, Mc, nxc, Mf, nxf, tf[rank*Mf:rank*Mf + Mf])
         
-    ufhat = ufhat + interpolation(uchat - uchat_init, u0hatc - uc_MTilde, dtf, Mc, nxc, Mf, nxf, tf[rank*Mf:rank*Mf + Mf])
+    uf = uf + interpolation(uc - uc_init, u0c - uc_MTilde, dtf, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf + Mf])
     
-    ufhat = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, tf[rank*Mf:rank*Mf+Mf], typeODE, ufhat, u0hatf, xf)
+    uf = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, QEf, QIf, tf[rank*Mf:rank*Mf+Mf], typeODE, uf, u0f, xf)
 
-    uf_M = np.zeros(nxf, dtype='cfloat')
-    uf_M = u0hatf
+    uf_M = np.zeros(nxf, dtype='float')
+    uf_M = u0f
     
 
     # PFASST ITERATIONS
     for k in range(1, K+1):
         # Step (1) - Perform one fine sweep
-        ufhat_prime = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, tf[rank*Mf:rank*Mf+Mf], typeODE, ufhat, uf_M, xf)
+        uf_prime = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, QEf, QIf, tf[rank*Mf:rank*Mf+Mf], typeODE, uf, uf_M, xf)
 
         # Step (2) - Restrict values ufhat_prime
-        uchat_prime = restriction(ufhat_prime, Mc, nxc, Mf, nxf)
+        uc_prime = restriction(uf_prime, Mc, nxc, Mf, nxf)
 
         # Step (3) - Compute FAS correction tau
-        tau_PFASST = FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf+Mf], typeODE, restriction(ufhat_prime, Mc, nxc, Mf, nxf), ufhat_prime, xc, xf)
+        tau_PFASST = FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf+Mf], typeODE, restriction(uf_prime, Mc, nxc, Mf, nxf), uf_prime, xc, xf)
         
         # Step (4) - Receive uf_M from processor n-1
         if rank > 0:
             uf_M = comm.recv(source=rank-1, tag=k)
             
         else:
-            uf_M = u0hatf
+            uf_M = u0f
 
         # Step (5) - Perform nG coarse sweeps 
-        uchat = uchat_prime
+        uc = uc_prime
         
-        uchat = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, tau_PFASST, tc[rank*Mc:rank*Mc+Mc], typeODE, uchat, restriction(uf_M, 1, nxc, 1, nxf), xc)
+        uc = coarse_sweep(AEc, AIc, dt, dtc, func, Mc, nG, nu, nxc, Sc, Qc, QEc, QIc, tau_PFASST, tc[rank*Mc:rank*Mc+Mc], typeODE, uc, restriction(uf_M, 1, nxc, 1, nxf), xc)
 
         # Step (6) - Interpolate last component of uchat_prime - uchat in space and add to ufhat_prime to yield ufhat
-        corrcM = interpolation(uchat[Mc*nxc - nxc:Mc*nxc] - uchat_prime[Mc*nxc - nxc:Mc*nxc], np.zeros(nxc), dtf, Mc, nxc, Mf, nxf, tf[rank*Mf:rank*Mf + Mf]) 
-        ufhat[Mf * nxf - nxf:Mf * nxf] = ufhat_prime[Mf * nxf - nxf:Mf * nxf] + corrcM
+        corrcM = interpolation(uc[Mc*nxc - nxc:Mc*nxc] - uc_prime[Mc*nxc - nxc:Mc*nxc], np.zeros(nxc), dtf, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf + Mf]) 
+        uf[Mf * nxf - nxf:Mf * nxf] = uf_prime[Mf * nxf - nxf:Mf * nxf] + corrcM
 
         # Step (7) - Send last component of ufhat to processor n+1
         if rank < (size - 1):
-            comm.send(ufhat[Mf*nxf-nxf:Mf*nxf], dest=rank+1, tag=k)
+            comm.send(uf[Mf*nxf-nxf:Mf*nxf], dest=rank+1, tag=k)
                 
         # Step (8) - Interpolate the difference uchat_prime-uchat at nodes 0 < m < M and add it to ufhat_prime to yield ufhat
-        corrc = interpolation(uchat - uchat_prime, np.zeros(nxc), dtf, Mc, nxc, Mf, nxf, tf[rank*Mf:rank*Mf + Mf])
-        ufhat[0:Mf * nxf - nxf] = ufhat_prime[0:Mf * nxf - nxf] + corrc[0:Mf * nxf - nxf]
+        corrc = interpolation(uc - uc_prime, np.zeros(nxc), dtf, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc+Mc], tf[rank*Mf:rank*Mf + Mf])
+        uf[0:Mf * nxf - nxf] = uf_prime[0:Mf * nxf - nxf] + corrc[0:Mf * nxf - nxf]
     
     # returns only the solution at end of sub intervals
-    uc_M = uchat[Mc * nxc - nxc:Mc * nxc]
-    uf_M = ufhat[Mf * nxf - nxf:Mf * nxf]
+    uc_M = uc[Mc * nxc - nxc:Mc * nxc]
+    uf_M = uf[Mf * nxf - nxf:Mf * nxf]
     
     
     return AIf, AIc, uf_M, uc_M, u_M_solve

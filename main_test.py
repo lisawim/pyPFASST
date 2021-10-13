@@ -5,6 +5,7 @@ from ic_test import ic
 from exact_sol_test import exact_sol
 from Euler import expEuler, impEuler
 from pfasst2_test import pfasst
+#from pfasst_test import pfasst
 from pfasst_coarsesweeps_test import pfasst_coarsesweeps
 from int_nodes_test import int_nodes
 from differential_operators_test import differentialA
@@ -16,6 +17,8 @@ import matplotlib.pyplot as plt
 matplotlib.use('TkAgg') 
 from scipy.linalg import expm
 import time
+import warnings
+warnings.filterwarnings('ignore')
 
 
 begin_program = time.time()
@@ -40,25 +43,21 @@ if typeODE == 'heat':
     func = 'sin'
     a = -np.pi
     b = np.pi
-    discretization = 'FFT'
     
 elif typeODE == 'heat_forced':
     func = 'sin_heat'
     a = -0.5
     b = 0.5
-    discretization = 'FD'
     
 elif typeODE == "Burgers":
     func = 'exp'
     a = 0
     b = 1
-    discretization = 'FFT'
     
 elif typeODE == 'advdif':
     func = 'sin_advdif'
     a = -0.5
     b = 0.5
-    discretization = 'FFT'
 
 # number of grid points are chosen so that nxf, and nxc, respectively, is a power of two
 nxf = 512
@@ -79,31 +78,32 @@ dt = T/N
 t = dt * np.arange(0, N + 1)
 t_solve = np.zeros(Mf)
 nt = np.shape(t)[0]
-tf = np.zeros((N * Mf))
-tc = np.zeros((N * Mc))
+tf = np.zeros(Mf)
+tc = np.zeros(Mc)
 
 ntf = np.shape(tf)[0]
 ntc = np.shape(tc)[0]
 
-# intermediate points t_m corresponds to Gauss-Lobatto nodes
-for l in range(0, nt-1):
-    tf[Mf*l:Mf*l + Mf] = int_nodes(t[l], t[l+1], Mf)
+# collocation nodes on [0,1], can scale with dt
+tf = int_nodes(0, 1, Mf)
+tc = int_nodes(0, 1, Mc)
 
-for l in range(0, nt-1):
-    tc[Mc*l:Mc*l + Mc] = int_nodes(t[l], t[l+1], Mc)
-    
-dtf = np.zeros((N * Mf))
-dtc = np.zeros((N * Mc))
+np.set_printoptions(precision=30)
+print(tf)
+
+dtf = np.zeros(Mf)
+dtc = np.zeros(Mc)
 
 ndtf = np.shape(dtf)[0]
 ndtc = np.shape(dtc)[0]
 
 # determination of the fine and coarse time steps
-for j in range(0, ndtf-1):
+for j in range(0, Mf-1):
     dtf[j] = tf[j+1]-tf[j]
 
-for j in range(0, ndtc-1):
+for j in range(0, Mc-1):
     dtc[j] = tc[j+1] - tc[j]
+
     
 dtf2 = dtf[0:Mf-1]
 dtc2 = dtc[0:Mc-1]
@@ -117,14 +117,17 @@ u0f, L = ic(xf, func, nu)
 u0c, L = ic(xc, func, nu)
 
 # for the pseudospectral method the Fourier coefficients are needed
-u0hatf = fft(u0f)
-u0hatc = fft(u0c)
+#u0hatf = fft(u0f)
+#u0hatc = fft(u0c)
 
 # number of coarse SDC sweeps per PFASST iteration
 nG = 1
 
 # number of PFASST iterations
-K = 0
+K = 5
+
+# Prediction to find a better initial condition
+prediction_on = False
 
 if rank == 0:
     print()
@@ -142,34 +145,32 @@ if rank == 0:
 
 # PFASST output
 if typeODE == 'heat' or typeODE == 'heat_forced' or typeODE == 'Burgers' or typeODE == 'advdif':
-    AIf, AIc, ufhat_M, uchat_M, uhat_solveM = pfasst(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, nu, Mc, Mf, rank, size, T, tc, tf, typeODE, u0hatc, u0hatf, v, xc, xf)
+    AIf, AIc, uf_M, uc_M, uhat_solveM = pfasst(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf)
     
-    #AIf, AIc, ufhat_M, uchat_M = pfasst_coarsesweeps(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, Mc, Mf, rank, size, tc, tf, typeODE, u0hatc, u0hatf, xc, xf)
+    #AIf, AIc, ufhat_M, uchat_M = pfasst_coarsesweeps(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, Mc, Mf, rank, size, tc, tf, typeODE, u0c, u0f, xc, xf)
     
 elif solveSDC == "expEuler":
-    uchat_M, AIc = expEuler(dt, func, L, nu, u0hatc, 0, T, typeODE, v, xc)
-    ufhat_M, AIf = expEuler(dt, func, L, nu, u0hatf, 0, T, typeODE, v, xf)
+    uc_M, AIc = expEuler(dt, func, L, nu, u0c, 0, T, typeODE, v, xc)
+    uf_M, AIf = expEuler(dt, func, L, nu, u0f, 0, T, typeODE, v, xf)
     
 elif solveSDC == "impEuler":
-    uchat_M, AIc = impEuler(dt, func, L, nu, u0hatc, 0, T, t, typeODE, v, xc)
-    ufhat_M, AIf = impEuler(dt, func, L, nu, u0hatf, 0, T, t, typeODE, v, xf)
+    uc_M, AIc = impEuler(dt, func, L, nu, u0c, 0, T, t, typeODE, v, xc)
+    uf_M, AIf = impEuler(dt, func, L, nu, u0f, 0, T, t, typeODE, v, xf)
     
 # exact solution
 if typeODE == 'heat':
-    u_exactf = np.fft.ifft(expm(t[rank+1]*AIf).dot(u0hatf))
-    u_exactc = np.fft.ifft(expm(t[rank+1]*AIc).dot(u0hatc))
+    u_exactf = ifft(expm(t[rank+1]*AIf).dot(fft(u0f)))
+    u_exactc = ifft(expm(t[rank+1]*AIc).dot(fft(u0c)))
     
 elif typeODE == 'Burgers' or typeODE == 'advdif' or typeODE == 'heat_forced':
     u_exactf = exact_sol(func, nu, t[rank+1], xf)
     u_exactc = exact_sol(func, nu, t[rank+1], xc)
         
 # Compute the ifft of the last SDC node
-uf_M = ifft(ufhat_M)
-uc_M = ifft(uchat_M)
 u_solveM = ifft(uhat_solveM)
 
 # Lmax error of the different processes
-print('   Rank', rank, '-- Error: %12.8e' %(max(abs(uf_M - u_exactf))))
+print('   Rank', rank, '-- Error: %12.20e' %(max(abs(uf_M - u_exactf))))
 #print('   Rank', rank, '-- Error: %12.8e' %(max(abs(u_exactf - uend))))
 
 #if K > 0:
@@ -191,7 +192,7 @@ if rank == (size-1):
     
     #plt.subplot(122)
     plt.title("{} on fine level at t={}".format(typeODE, T))
-    plt.plot(xf, uf_M.real, label='Numerical solution')
+    plt.plot(xf, uf_M, label='Numerical solution')
     plt.plot(xf, u_exactf, label='Exact solution')
     plt.legend(loc='upper right')
     
