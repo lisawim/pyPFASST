@@ -35,7 +35,7 @@ Mf = 5
 Mc = 3
 
 # Choose an ODE which shall be solved ('heat', 'heat_forced', 'Burgers' or 'advdif')
-typeODE = "advdif"
+typeODE = "heat_forced"
 
 # function for initial condition - typeODE determines function for initial condition and spatial domain
 if typeODE == 'heat':
@@ -77,8 +77,6 @@ dt = T/N
 t = dt * np.arange(0, N + 1)
 t_solve = np.zeros(Mf)
 nt = np.shape(t)[0]
-#tf = np.zeros(Mf)
-#tc = np.zeros(Mc)
 
 tf = np.zeros(N * Mf)
 tc = np.zeros(N * Mc)
@@ -87,17 +85,11 @@ ntf = np.shape(tf)[0]
 ntc = np.shape(tc)[0]
 
 # collocation nodes on [0,1], can scale with dt
-#tf = int_nodes(0, 1, Mf)
-#tc = int_nodes(0, 1, Mc)
-
 for l in range(0, nt-1):
     tf[Mf*l:Mf*l + Mf] = int_nodes(t[l], t[l+1], Mf)
 
 for l in range(0, nt-1):
     tc[Mc*l:Mc*l + Mc] = int_nodes(t[l], t[l+1], Mc)
-
-np.set_printoptions(precision=30)
-print(tf)
 
 dtf = np.zeros(Mf)
 dtc = np.zeros(Mc)
@@ -124,15 +116,11 @@ v = 1
 u0f, L = ic(xf, func, nu)
 u0c, L = ic(xc, func, nu)
 
-# for the pseudospectral method the Fourier coefficients are needed
-#u0hatf = fft(u0f)
-#u0hatc = fft(u0c)
-
 # number of coarse SDC sweeps per PFASST iteration
 nG = 1
 
 # number of PFASST iterations
-K = 5
+K = 1
 
 # Prediction to find a better initial condition
 prediction_on = False
@@ -154,8 +142,6 @@ if rank == 0:
 # PFASST output
 if typeODE == 'heat' or typeODE == 'heat_forced' or typeODE == 'Burgers' or typeODE == 'advdif':
     AIf, AIc, uf_M, uc_M, uhat_solveM = pfasst(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf)
-    
-    #AIf, AIc, ufhat_M, uchat_M = pfasst_coarsesweeps(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, Mc, Mf, rank, size, tc, tf, typeODE, u0c, u0f, xc, xf)
     
 elif solveSDC == "expEuler":
     uc_M, AIc = expEuler(dt, func, L, nu, u0c, 0, T, typeODE, v, xc)

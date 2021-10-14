@@ -113,8 +113,6 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_
     # PFASST ITERATIONS
     for k in range(1, K+1):
         
-        print('Iteration ', k)
-        
         # Coarse level
         
         # restrict the fine values
