@@ -20,11 +20,48 @@ import sys
 
 def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf):
     
+    """
+    Input:
+        comm         -    Totality of all processes
+        dt           -    time step
+        dtc          -    time step on coarse level
+        dtf          -    time step on fine level
+        func         -    function for initial condition
+        K            -    number of PFASST iterations
+        L            -    period
+        nG           -    number of coarse sweeps
+        nxc          -    number of coarse DoF
+        nxf          -    number of fine DoF
+        nu           -    diffusion coefficient
+        Mc           -    number of coarse collocation nodes
+        Mf           -    number of fine collocation nodes
+        prediction_on-    Setter for prediction
+        rank         -    index for one process
+        size         -    number of processes
+        T            -    end time
+        tc           -    time interval on coarse level
+        tf           -    time interval on fine level
+        typeODE      -    equation to be solved
+        u0c          -    initial condition on coarse level
+        u0f          -    initial condition on fine level
+        v            -    advection speed
+        xc           -    x-values on coarse level
+        xf           -    x-values on fine level
+        
+    Return:
+        Solution after K PFASST iterations on every rank
+    """
+        
+        
+        
+        
     # initialization of vector of solution values and vector of function values of solution values
     uf = np.zeros(nxf * Mf, dtype='float')
     uc = np.zeros(nxc * Mc, dtype='float')
     uc_init = np.zeros(nxc * Mc, dtype='float')
     uhat_solve = np.zeros(nxf * Mf, dtype='cfloat')
+    
+    res = np.zeros(K, dtype='float')
     
     # spread initial condition to each collocation node -- restrict fine vector to yield coarse vector
     if rank == 0:
@@ -60,9 +97,9 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_
     AIc = comm.bcast(AIc, root=0)
 
     
-    # spectral integration matrices SE, SI on fine and on coarse level    
-    Qf, QEf, QIf, Sf, SEf, SIf = spectral_int_matrix(Mf, dt, dtf, tf[rank*Mf:rank*Mf + Mf])
-    Qc, QEc, QIc, Sc, SEc, SIc = spectral_int_matrix(Mc, dt, dtc, tc[rank*Mc:rank*Mc + Mc])
+    # spectral integration matrices   
+    Qf, QEf, QIf, Sf = spectral_int_matrix(Mf, dt, dtf, tf[rank*Mf:rank*Mf + Mf])
+    Qc, QEc, QIc, Sc = spectral_int_matrix(Mc, dt, dtc, tc[rank*Mc:rank*Mc + Mc])
        
     uc_MTilde = np.zeros(nxc, dtype='float')
     uc_MTilde = u0c
@@ -94,8 +131,7 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_
             if rank < (size - 1):
                 comm.send(uc[Mc*nxc-nxc:Mc*nxc], dest=rank+1, tag=j)
             
-        uf = uf + interpolation(uc - uc_init, Mc, nxc, uf, Mf, nxf, tc, tf)
-        #uf = interpolation(uc - uc_init, Mc, nxc, uf, Mf, nxf, tc[rank*Mc:rank*Mc + Mc], tf[rank*Mf:rank*Mf + Mf])
+        uf = uf + interpolation(uc - uc_init, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc + Mc], tf[rank*Mf:rank*Mf + Mf])
     
         uf = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, QEf, QIf, tf[rank*Mf:rank*Mf + Mf], typeODE, uf, u0f, xf)
         
@@ -139,11 +175,9 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_
         # Fine level
         
         # interpolate coarse correction
-        delta = interpolation(uc_prime - uc, Mc, nxc, uf, Mf, nxf, tc, tf)
+        delta = interpolation(uc_prime - uc, Mc, nxc, Mf, nxf, tc[rank*Mc:rank*Mc + Mc], tf[rank*Mf:rank*Mf + Mf])
         
         uf_prime = uf + delta
-        
-        #uf_prime = interpolation(uc_prime - uc, Mc, nxc, uf, Mf, nxf, tc[rank*Mc:rank*Mc + Mc], tf[rank*Mf:rank*Mf + Mf])
         
         
         # send initial value to next process
@@ -158,14 +192,14 @@ def pfasst(comm, dt, dtc, dtf, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_
             uf_M = u0f
         
         # fine Sweep
-        uf = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, QEf, QIf, tf[rank*Mf:rank*Mf + Mf], typeODE, uf_prime, uf_M, xf)
-            
+        uf, res[k-1] = fine_sweep(AEf, AIf, dt, dtf, func, Mf, 1, nu, nxf, Sf, Qf, QEf, QIf, tf[rank*Mf:rank*Mf + Mf], typeODE, uf_prime, uf_M, xf)
+
             
     # returns only the solution at end of sub intervals
     uc_M = uc[Mc * nxc - nxc:Mc * nxc]
     uf_M = uf[Mf * nxf - nxf:Mf * nxf]
     
-    return AIf, AIc, uf_M, uc_M, u_M_solve
+    return AIf, AIc, res, uf_M, uc_M, u_M_solve
         
         
         

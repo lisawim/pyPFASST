@@ -35,7 +35,7 @@ Mf = 5
 Mc = 3
 
 # Choose an ODE which shall be solved ('heat', 'heat_forced', 'Burgers' or 'advdif')
-typeODE = "heat_forced"
+typeODE = "Burgers"
 
 # function for initial condition - typeODE determines function for initial condition and spatial domain
 if typeODE == 'heat':
@@ -120,7 +120,7 @@ u0c, L = ic(xc, func, nu)
 nG = 1
 
 # number of PFASST iterations
-K = 1
+K = 20
 
 # Prediction to find a better initial condition
 prediction_on = False
@@ -141,7 +141,7 @@ if rank == 0:
 
 # PFASST output
 if typeODE == 'heat' or typeODE == 'heat_forced' or typeODE == 'Burgers' or typeODE == 'advdif':
-    AIf, AIc, uf_M, uc_M, uhat_solveM = pfasst(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf)
+    AIf, AIc, res, uf_M, uc_M, uhat_solveM = pfasst(comm, dt, dtc2, dtf2, func, K, L, nG, nxc, nxf, nu, Mc, Mf, prediction_on, rank, size, T, tc, tf, typeODE, u0c, u0f, v, xc, xf)
     
 elif solveSDC == "expEuler":
     uc_M, AIc = expEuler(dt, func, L, nu, u0c, 0, T, typeODE, v, xc)
@@ -164,7 +164,8 @@ elif typeODE == 'Burgers' or typeODE == 'advdif' or typeODE == 'heat_forced':
 u_solveM = ifft(uhat_solveM)
 
 # Lmax error of the different processes
-print('   Rank', rank, '-- Error: %12.20e' %(max(abs(uf_M - u_exactf))))
+#print('   Rank', rank, '-- Error and Residual: %12.8e -- %12.8e' %(max(abs(uf_M - u_exactf)), res[-1]) )
+print('   Rank', rank, ": Error -- %12.8e" % (max(abs(uf_M - u_exactf))), "|| Residual -- %12.8e" % (res[-1]))
 #print('   Rank', rank, '-- Error: %12.8e' %(max(abs(u_exactf - uend))))
 
 #if K > 0:
@@ -190,6 +191,11 @@ if rank == (size-1):
     plt.plot(xf, u_exactf, label='Exact solution')
     plt.legend(loc='upper right')
     
+    plt.show()
+    
+    plt.title('Residual')
+    plt.plot(np.arange(0, K), res, 'm-*')
+    plt.xlabel('PFASST iterations')
     plt.show()
     
 

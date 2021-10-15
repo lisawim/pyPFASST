@@ -1,12 +1,17 @@
 import numpy as np
 
 def ic(x, func, nu):
-    # Input:
-    # x         - grid points
-    # func      - function which should be used for the initial condition
-    #
-    # Output:
-    # returns the initial condition u0, and the period L for periodic boundary conditions
+    
+    """
+    Input:
+        x            -    x-values
+        func         -    function for initial condition (fixed for a specific ODE)
+        nu           -    diffusion coefficient
+        
+    Return:
+        initial condition for a problem
+    """
+
 
     # initial condition for Burgers
     n = np.shape(x)[0]

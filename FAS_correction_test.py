@@ -7,9 +7,38 @@ warnings.filterwarnings('ignore')
 
 def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_int, tf_int, typeODE, uc, uf, xc, xf):
     
+    """
+    Input:
+        AIc          -    Operator for Laplacian on coarse level
+        AIf          -    Operator for gradient on coarse level
+        AEc          -    Operator for Laplacian on fine level
+        AEf          -    Operator for gradient on fine level
+        dt           -    time step
+        func         -    function for initial condition
+        Mc           -    number of coarse collocation nodes
+        nxc          -    number of coarse DoF
+        Mf           -    number of fine collocation nodes
+        nxf          -    number of fine DoF
+        nu           -    diffusion coefficient
+        Qf           -    fine integration matrix 't0 to node'
+        Qc           -    coarse integration matrix 't0 to node'
+        Sf           -    fine spectral integration matrix 'node to node'
+        Sc           -    coarse coarse integration matrix 'node to node'
+        tc_int       -    time interval on coarse level
+        tf_int       -    time interval on fine level
+        typeODE      -    equation to be solved
+        uc           -    current vector of u on coarse level
+        uf           -    current vector of u on fine level
+        xc           -    x-values on coarse level
+        xf           -    x-values on fine level
+        
+    Return:
+        FAS correction
+    """
+    
     def rhs(func, nu, x, t):
         n = np.shape(x)[0]
-        arr = np.zeros(n, dtype='cfloat')
+        arr = np.zeros(n, dtype='float')
         sigma = 0.004
         
         if func == 'exp':
@@ -44,32 +73,68 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
     
     # tau for different equations (heat equation or Burgers' equation)
     if typeODE == 'heat':
-        tau = np.zeros(nxc * (Mc-1), dtype='cfloat')
+        # 'node to node'
+        #tau = np.zeros(nxc * (Mc-1), dtype='float')
         
-        # Evaluation of function values on fine level
-        fevalf = np.zeros(nxf * Mf, dtype='cfloat')
+        # 't0 to node'
+        tau = np.zeros(nxc * Mc, dtype='float')
         
-        for m in range(0, Mf):
-            fevalf[m*nxf:m*nxf + nxf] = AIf.dot(ufhat[m*nxf:m*nxf + nxf])
-                
-        # Integrate from 't0 to node' on fine level
-        restr_QF = restriction(kron(Qf, np.identity(nxf)).dot(fevalf), Mc, nxc, Mf, nxf)
-                                       
-        # Evaluation of function values on coarse level                          
-        fevalc = np.zeros(nxc * Mc, dtype='cfloat')
-            
+        
+        # restrict fine u in space and time
+        tmp_u = np.zeros(Mc*nxc, dtype='float')        
+        tmp_u = restriction(uf, Mc, nxc, Mf, nxf, tc_int, tf_int)
+        
+        
+        # Compute coarse function values
         for m in range(0, Mc):
-            fevalc[m*nxc:m*nxc + nxc] = AIc.dot(uchat[m*nxc:m*nxc + nxc])
+            fimplc[m*nxc:m*nxc+nxc] = ifft(AIc.dot(fft(tmp_u[m*nxc:m*nxc+nxc])))
+            
+        # Evaluation of function values on coarse level                          
+        fevalc = np.zeros(nxc * Mc, dtype='float')
+        for m in range(0, Mc):
+            fevalc[m*nxc:m*nxc + nxc] = fimplc[m*nxc:m*nxc+nxc]
+        
         
         # Integrate from 't0 to node' on coarse level
-        QFc = kron(Qc, np.identity(nxc)).dot(fevalc)
+        Qc_int = np.zeros(Mc * nxc, dtype='float')
+        for l in range(0, Mc):
+            for j in range(0, Mc):
+                Qc_int[l*nxc:l*nxc+nxc] += dt * Qc[l, j] * fevalc[j*nxc:j*nxc+nxc]
+                
+        
+        # Compute fine function values
+        for m in range(0, Mf):
+            fimplf[m*nxf:m*nxf+nxf] = ifft(AIf.dot(fft(uf[m*nxf:m*nxf+nxf])))
+            
+            
+        # Evaluation of function values on fine level
+        fevalf = np.zeros(nxf * Mf, dtype='float')        
+        for m in range(0, Mf):
+            fevalf[m*nxf:m*nxf+nxf] = fimplf[m*nxf:m*nxf+nxf]
+            
+        
+        # Integrate from 't0 to node' on fine level
+        Qf_int = np.zeros(Mf * nxf, dtype='float')
+        for l in range(0, Mf):
+            for j in range(0, Mf):
+                Qf_int[l*nxf:l*nxf+nxf] += dt * Qf[l, j] * fevalf[j*nxf:j*nxf+nxf]
+                
+                                
+        # Restrict the integral of fine function values in space and time
+        restr_QF = restriction(Qf_int, Mc, nxc, Mf, nxf, tc_int, tf_int)
+        
+                
+        # tau with 't0 to node'
+        tau = (restr_QF - Qc_int)
+        
         
         # Conversion to 'node to node'
-        for m in range(0, Mc-1):
-            restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
-            QFc[m*nxc:m*nxc+nxc] = QFc[(m+1)*nxc:(m+1)*nxc+nxc] - QFc[m*nxc:m*nxc+nxc]        
+        #for m in range(0, Mc-1):
+        #    restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
+        #    QFc[m*nxc:m*nxc+nxc] = QFc[(m+1)*nxc:(m+1)*nxc+nxc] - QFc[m*nxc:m*nxc+nxc] 
         
-        tau = dt * (restr_QF - QFc)
+        
+        #tau = dt * (restr_QF - QFc)                              
         
     elif typeODE == 'heat_forced':
         # 'node to node'
@@ -80,8 +145,7 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         
         
         # restrict fine u in space and time
-        tmp_u = np.zeros(Mc*nxc, dtype='float')
-        
+        tmp_u = np.zeros(Mc*nxc, dtype='float')        
         tmp_u = restriction(uf, Mc, nxc, Mf, nxf, tc_int, tf_int)
         
         
@@ -132,66 +196,103 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         # tau with 't0 to node'
         tau = (restr_QF - Qc_int)
         
+        
         # Conversion to 'node to node'
         #for m in range(0, Mc-1):
         #    restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
-        #    QFc[m*nxc:m*nxc+nxc] = QFc[(m+1)*nxc:(m+1)*nxc+nxc] - QFc[m*nxc:m*nxc+nxc]        
+        #    QFc[m*nxc:m*nxc+nxc] = QFc[(m+1)*nxc:(m+1)*nxc+nxc] - QFc[m*nxc:m*nxc+nxc]   
+        
         
         #tau = dt * (restr_QF - QFc)
         
     elif typeODE == 'Burgers':
-        tau = np.zeros(nxc * (Mc-1), dtype='cfloat')
-        
-        # Evaluation of function values on fine level
-        fevalf = np.zeros(nxf * Mf, dtype='cfloat')
-        
-        AEfufhat = np.zeros(nxf * Mf, dtype='cfloat')
-        nsf = np.zeros(nxf * Mf, dtype='cfloat')
-        nsfhat = np.zeros(nxf * Mf, dtype='cfloat')
-        
-        for m in range(0, Mf):
-            AEfufhat[m*nxf:m*nxf + nxf] = AEf.dot(ufhat[m*nxf:m*nxf + nxf])
-            nsf[m*nxf:m*nxf + nxf] = -np.multiply(ifft(ufhat[m*nxf:m*nxf + nxf]), ifft(AEfufhat[m*nxf:m*nxf + nxf]))
-            nsfhat[m*nxf:m*nxf + nxf] = fft(nsf[m*nxf:m*nxf + nxf])
-            
-        for m in range(0, Mf):
-            fevalf[m*nxf:m*nxf + nxf] = nsfhat[m*nxf:m*nxf + nxf] + AIf.dot(ufhat[m*nxf:m*nxf + nxf]) + rhsFf[m*nxf:m*nxf+nxf]
-                
-        # Integrate from 't0 to node' on fine level
-        restr_QF = restriction(kron(Qf, np.identity(nxf)).dot(fevalf), Mc, nxc, Mf, nxf)
-        
-        # Integrate from 'node to node' on fine level
-        SF = kron(Sf, np.identity(nxf)).dot(fevalf)
-        restr_SF[0:nxc] = restriction(SF[0:nxf] + SF[nxf:2*nxf], 1, nxc, 1, nxf)
-        restr_SF[nxc:2*nxc] = restriction(SF[2*nxf:3*nxf] + SF[3*nxf:4*nxf], 1, nxc, 1, nxf)
-                                       
-        # Evaluation of function values on coarse level                          
-        fevalc = np.zeros(nxc * Mc, dtype='cfloat')
-        
+
         AEcuchat = np.zeros(nxc * Mc, dtype='cfloat')
         nsc = np.zeros(nxc * Mc, dtype='cfloat')
-        nschat = np.zeros(nxc * Mc, dtype='cfloat')
+        nschat = np.zeros(nxc * Mc, dtype='float')
+        AEfufhat = np.zeros(nxf * Mf, dtype='cfloat')
+        nsf = np.zeros(nxf * Mf, dtype='cfloat')
+        nsfhat = np.zeros(nxf * Mf, dtype='float')
         
+        
+        # 'node to node'
+        #tau = np.zeros(nxc * (Mc-1), dtype='float')
+        
+        # 't0 to node'
+        tau = np.zeros(nxc * Mc, dtype='float')
+        
+        
+        # restrict fine u in space and time
+        tmp_u = np.zeros(Mc*nxc, dtype='float')        
+        tmp_u = restriction(uf, Mc, nxc, Mf, nxf, tc_int, tf_int)
+        
+                
         for m in range(0, Mc):
-            AEcuchat[m*nxc:m*nxc + nxc] = AEc.dot(uchat[m*nxc:m*nxc + nxc])
-            nsc[m*nxc:m*nxc + nxc] = -np.multiply(ifft(uchat[m*nxc:m*nxc + nxc]), ifft(AEcuchat[m*nxc:m*nxc + nxc]))
-            nschat[m*nxc:m*nxc + nxc] = fft(nsc[m*nxc:m*nxc + nxc])
+            AEcuchat[m*nxc:m*nxc + nxc] = AEc.dot(fft(tmp_u[m*nxc:m*nxc + nxc]))
+            nsc[m*nxc:m*nxc + nxc] = -np.multiply(tmp_u[m*nxc:m*nxc + nxc], ifft(AEcuchat[m*nxc:m*nxc + nxc]))
+            nschat[m*nxc:m*nxc + nxc] = ifft(fft(nsc[m*nxc:m*nxc + nxc]))
             
+        
+        # Compute coarse function values
         for m in range(0, Mc):
-            fevalc[m*nxc:m*nxc + nxc] = nschat[m*nxc:m*nxc + nxc] + AIc.dot(uchat[m*nxc:m*nxc + nxc]) + rhsFc[m*nxc:m*nxc+nxc]
-        
+            fexplc[m*nxc:m*nxc+nxc] = nschat[m*nxc:m*nxc + nxc] + rhsFc[m*nxc:m*nxc+nxc]
+            fimplc[m*nxc:m*nxc+nxc] = ifft(AIc.dot(fft(tmp_u[m*nxc:m*nxc+nxc])))
+            
+                
+        # Evaluation of function values on coarse level                          
+        fevalc = np.zeros(nxc * Mc, dtype='float')
+        for m in range(0, Mc):
+            fevalc[m*nxc:m*nxc + nxc] = fexplc[m*nxc:m*nxc+nxc] + fimplc[m*nxc:m*nxc+nxc]
+            
+            
         # Integrate from 't0 to node' on coarse level
-        QFc = kron(Qc, np.identity(nxc)).dot(fevalc)
+        Qc_int = np.zeros(Mc * nxc, dtype='float')
+        for l in range(0, Mc):
+            for j in range(0, Mc):
+                Qc_int[l*nxc:l*nxc+nxc] += dt * Qc[l, j] * fevalc[j*nxc:j*nxc+nxc]
+                
+                
+        for m in range(0, Mf):
+            AEfufhat[m*nxf:m*nxf + nxf] = AEf.dot(fft(uf[m*nxf:m*nxf + nxf]))
+            nsf[m*nxf:m*nxf + nxf] = -np.multiply(uf[m*nxf:m*nxf + nxf], ifft(AEfufhat[m*nxf:m*nxf + nxf]))
+            nsfhat[m*nxf:m*nxf + nxf] = ifft(fft(nsf[m*nxf:m*nxf + nxf]))
+            
         
-        # Integrate from 'node to node' on coarse level
-        SFc = kron(Sc, np.identity(nxc)).dot(fevalc)
+        # Compute fine function values
+        for m in range(0, Mf):
+            fexplf[m*nxf:m*nxf+nxf] = nsfhat[m*nxf:m*nxf + nxf] + rhsFf[m*nxf:m*nxf+nxf]
+            fimplf[m*nxf:m*nxf+nxf] = ifft(AIf.dot(fft(uf[m*nxf:m*nxf+nxf])))
+            
+                
+        # Evaluation of function values on fine level                          
+        fevalf = np.zeros(nxf * Mf, dtype='float')
+        for m in range(0, Mf):
+            fevalf[m*nxf:m*nxf + nxf] = fexplf[m*nxf:m*nxf+nxf] + fimplf[m*nxf:m*nxf+nxf]
+            
+            
+        # Integrate from 't0 to node' on coarse level
+        Qf_int = np.zeros(Mf * nxf, dtype='float')
+        for l in range(0, Mf):
+            for j in range(0, Mf):
+                Qf_int[l*nxf:l*nxf+nxf] += dt * Qf[l, j] * fevalf[j*nxf:j*nxf+nxf]
+                
+                
+        # Restrict the integral of fine function values in space and time
+        restr_QF = restriction(Qf_int, Mc, nxc, Mf, nxf, tc_int, tf_int)
+        
+        
+        # tau with 't0 to node'
+        tau = (restr_QF - Qc_int)
+        
         
         # Conversion to 'node to node'
-        for m in range(0, Mc-1):
-            restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
-            QFc[m*nxc:m*nxc+nxc] = QFc[(m+1)*nxc:(m+1)*nxc+nxc] - QFc[m*nxc:m*nxc+nxc]        
+        #for m in range(0, Mc-1):
+        #    restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
+        #    Qc_int[m*nxc:m*nxc+nxc] = Qc_int[(m+1)*nxc:(m+1)*nxc+nxc] - Qc_int[m*nxc:m*nxc+nxc]
         
-        tau = dt * (restr_QF - QFc)
+        
+        # tau with 'node to node'
+        #tau = restr_QF - Qc_int
         
     elif typeODE == 'advdif':
         # 'node to node'
@@ -200,10 +301,11 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         # 't0 to node'
         tau = np.zeros(nxc * Mc, dtype='float')
         
-        # restrict fine u in space and time
-        tmp_u = np.zeros(Mc*nxc, dtype='float')
         
+        # restrict fine u in space and time
+        tmp_u = np.zeros(Mc*nxc, dtype='float')        
         tmp_u = restriction(uf, Mc, nxc, Mf, nxf, tc_int, tf_int)
+        
             
         # Compute coarse function values
         for m in range(0, Mc):
@@ -250,10 +352,12 @@ def FAS(AIc, AIf, AEc, AEf, dt, func, Mc, nxc, Mf, nxf, nu, Qf, Qc, Sf, Sc, tc_i
         # tau with 't0 to node'
         tau = (restr_QF - Qc_int)
         
+        
         # Conversion to 'node to node'
         #for m in range(0, Mc-1):
         #    restr_QF[m*nxc:m*nxc+nxc] = restr_QF[(m+1)*nxc:(m+1)*nxc+nxc] - restr_QF[m*nxc:m*nxc+nxc]
         #    Qc_int[m*nxc:m*nxc+nxc] = Qc_int[(m+1)*nxc:(m+1)*nxc+nxc] - Qc_int[m*nxc:m*nxc+nxc]
+        
         
         # tau with 'node to node'
         #tau = restr_QF - Qc_int

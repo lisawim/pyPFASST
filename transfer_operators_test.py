@@ -6,17 +6,21 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-def interpolation(u, Mc, nxc, uf, Mf, nxf, tc, tf):
-    # Input:
-    # u        - the vector u which has the size nx + 1
-    # Mc       - number of coarse intermediate nodes plus 1
-    # nxc      - number of coarse spatial nodes
-    # Mf       - number of fine intermediate nodes plus 1
-    # nxf      - number of fine spatial nodes
-    # tf       - temporal nodes on fine level
-    #
-    # Output:
-    # returns the interpolation of vector u on fine level
+def interpolation(u, Mc, nxc, Mf, nxf, tc, tf):
+    
+    """
+    Input:
+        u            -    vector u on coarse level
+        Mc           -    number of coarse collocation nodes
+        nxc          -    number of coarse DoF
+        Mf           -    number of fine collocation nodes
+        nxf          -    number of fine DoF
+        tc           -    time interval on coarse level
+        tf           -    time interval on fine level
+        
+    Return:
+        Interpolation of u to fine level
+    """
     
     # for time interpolation - the Lagrange polynomial is used
     def polynomial_interpolation(tau0, u0, tau2, u2, tau4, u4, z):
@@ -81,15 +85,20 @@ def interpolation(u, Mc, nxc, uf, Mf, nxf, tc, tf):
     return uInt
 
 def restriction(u, Mc, nxc, Mf, nxf, tc, tf):
-    # Input:
-    # u        - the vector u which has the size nxf or Mf*nxf
-    # Mc       - number of coarse collocation nodes
-    # nxc      - number of coarse spatial nodes
-    # Mf       - number of fine collocation nodes
-    # nxf      - number of fine spatial nodes
-    #
-    # Output:
-    # returns the restriction of vector u on a coarse level with injection
+    
+    """
+    Input:
+        u            -    vector u on coarse level
+        Mc           -    number of coarse collocation nodes
+        nxc          -    number of coarse DoF
+        Mf           -    number of fine collocation nodes
+        nxf          -    number of fine DoF
+        tc           -    time interval on coarse level
+        tf           -    time interval on fine level
+        
+    Return:
+        Restriction of u to coarse level
+    """
                 
     uRestr = np.zeros(nxc * Mc, dtype='float')
     tmp_uf = np.zeros(nxc * Mf, dtype='float')

@@ -1,6 +1,18 @@
 import numpy as np
 
 def exact_sol(func, nu, T, x):
+    
+    """
+    Input:
+        func         - function for initial condition
+        nu           - diffusion coefficient
+        T            - end time
+        x            - x-values
+        
+    Return:
+        exact solution at time t on x-values
+    """
+    
     n = np.shape(x)[0]
     u_exact = np.zeros(n)
     
