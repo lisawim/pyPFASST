@@ -5,7 +5,6 @@ from ic import ic
 from exact_sol import exact_sol
 from Euler import expEuler, impEuler
 from pfasst2 import pfasst
-#from pfasst import pfasst         # Algorithm as in Emett&Minion(2012) - wrong
 from int_nodes import int_nodes
 from differential_operators import differentialA
 from resolved_run import single_SDC
